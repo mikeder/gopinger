@@ -1,60 +1,86 @@
 package main
 
 import (
-  "flag"
-  "fmt"
-  "net/http"
-  "time"
-  "github.com/mikeder/gopinger/lib"
-  "github.com/jasonlvhit/gocron"
+	"fmt"
+	"log"
+	"net/http"
+	"time"
+
+	httpstat "github.com/tcnksm/go-httpstat"
 )
 
+// Check definition of a check to be performed by the program.
+type Check struct {
+	URL         string        `json:"url"`
+	HealthyCode int           `json:"healthycode"`
+	Method      string        `json:"method"`
+	Timeout     time.Duration `json:"timeout"`
+}
+
+// Result is the output of a check against the given Check.
+type Result struct {
+	Code     int     `json:"code"`
+	Duration float32 `json:"duration"`
+	Status   string  `json:"status"`
+	Reason   string  `json:"reason"`
+}
+
 func main() {
-    url := flag.String("url", "https://golang.org", "URL to perform check against.")
-    code := flag.Int("code", 200, "Healthy response code to check for.")
-    method := flag.String("method", "GET", "HTTP method to use in request.")
-    debug := flag.Bool("v", false, "Print debug information.")
-    flag.Parse()
 
-    if *debug {
-      fmt.Println("## Debug Info ##\n")
-      fmt.Printf("URL: %v\n", *url)
-      fmt.Printf("Code: %v\n", *code)
-      fmt.Printf("Method: %v\n", *method)
-    }
+	sites := []string{"https://mikeder.net", "https://sqweeb.net", "https://psymux.net"}
 
-    client := &http.Client{
-    	Timeout: time.Second * 5,
-    }
+	// Setup list of checks to be performed
+	var checks []Check
+	for _, url := range sites {
+		checks = append(checks, Check{URL: url, HealthyCode: 200, Method: "GET", Timeout: 3})
+	}
 
-    switch *method {
-    case "GET":
-      resp, err := client.Get(*url)
-      if err != nil {
-        panic(err)
-      }
-      handleResponse(*resp, *code, *url)
-    default:
-      panic("Requested method is not yet supported.")
-    }
+	var results []Result
+	var client http.Client
+	// Perform the checks
+	for _, check := range checks {
+		fmt.Println("Calling: " + check.URL)
+		results = append(results, performCheck(client, check))
+	}
+
+	for _, result := range results {
+		fmt.Println(result.Status, result.Code, result.Duration)
+	}
 }
 
-func performCheck(client http.Client, check checks.Check) checks.Result {
-  result := checks.Result{
-    Status: "good",
-    Reason: "things worked!",
-  }
-  return result
-}
+func performCheck(cl http.Client, ch Check) Result {
 
-func handleResponse(resp http.Response, code int, url string) {
-  if resp.StatusCode != code {
-    fmt.Printf("Health check failed for %v\n", url)
-    fmt.Println("\n")
-    fmt.Printf("Response: %v", resp)
-  } else {
-    fmt.Printf("Health check passed for %v\n", url)
-    fmt.Println("\n")
-    fmt.Printf("Response: %v", resp)
-  }
+	// Set custom timeout per check
+	cl.Timeout = time.Duration(time.Second * ch.Timeout)
+	req, err := http.NewRequest(ch.Method, ch.URL, nil)
+
+	// Create a httpstat powered context
+	var stats httpstat.Result
+	ctx := httpstat.WithHTTPStat(req.Context(), &stats)
+	req = req.WithContext(ctx)
+
+	// Perform the check and defer body close
+	resp, err := cl.Do(req)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	// Show the results
+	log.Printf("DNS lookup: %d ms", int(stats.DNSLookup/time.Millisecond))
+	log.Printf("TCP connection: %d ms", int(stats.TCPConnection/time.Millisecond))
+	log.Printf("TLS handshake: %d ms", int(stats.TLSHandshake/time.Millisecond))
+	log.Printf("Server processing: %d ms", int(stats.ServerProcessing/time.Millisecond))
+	log.Printf("Content transfer: %d ms", int(stats.ContentTransfer(time.Now())/time.Millisecond))
+
+	var result Result
+	result.Code = resp.StatusCode
+	result.Duration = float32((stats.DNSLookup + stats.TCPConnection + stats.TLSHandshake + stats.ServerProcessing + stats.Connect) * time.Millisecond)
+	result.Status = "PASS"
+	if result.Code != ch.HealthyCode {
+		result.Status = "FAIL"
+		result.Reason = "StatusCode Mismatch!"
+	}
+
+	return result
 }
