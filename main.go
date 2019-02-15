@@ -19,15 +19,17 @@ type Check struct {
 
 // Result is the output of a check against the given Check.
 type Result struct {
-	Code     int     `json:"code"`
+	Code     int `json:"code"`
+	Stats    httpstat.Result
 	Duration float32 `json:"duration"`
 	Status   string  `json:"status"`
 	Reason   string  `json:"reason"`
+	URL      string  `json:"url"`
 }
 
 func main() {
 
-	sites := []string{"https://mikeder.net", "https://sqweeb.net", "https://psymux.net"}
+	sites := []string{"https://mikeder.net", "https://sqweeb.net", "https://bethesda.net", "https://api.bethesda.net", "https://google.com"}
 
 	// Setup list of checks to be performed
 	var checks []Check
@@ -74,6 +76,7 @@ func performCheck(cl http.Client, ch Check) Result {
 	log.Printf("Content transfer: %d ms", int(stats.ContentTransfer(time.Now())/time.Millisecond))
 
 	var result Result
+	result.Stats = stats
 	result.Code = resp.StatusCode
 	result.Duration = float32((stats.DNSLookup + stats.TCPConnection + stats.TLSHandshake + stats.ServerProcessing + stats.Connect) * time.Millisecond)
 	result.Status = "PASS"
