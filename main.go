@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"net/http"
 	"time"
 
@@ -19,17 +18,23 @@ type Check struct {
 
 // Result is the output of a check against the given Check.
 type Result struct {
-	Code     int `json:"code"`
-	Stats    httpstat.Result
-	Duration float32 `json:"duration"`
-	Status   string  `json:"status"`
-	Reason   string  `json:"reason"`
-	URL      string  `json:"url"`
+	Code   int `json:"code"`
+	Stats  httpstat.Result
+	Status string `json:"status"`
+	Reason string `json:"reason"`
+	URL    string `json:"url"`
 }
 
 func main() {
 
-	sites := []string{"https://mikeder.net", "https://sqweeb.net", "https://bethesda.net", "https://api.bethesda.net", "https://google.com"}
+	sites := []string{
+		"https://forbar.net",
+		"https://mikeder.net",
+		"https://docker.sqweeb.net",
+		"https://music.sqweeb.net",
+		"https://git.sqweeb.net",
+		"https://api.github.com",
+	}
 
 	// Setup list of checks to be performed
 	var checks []Check
@@ -37,20 +42,21 @@ func main() {
 		checks = append(checks, Check{URL: url, HealthyCode: 200, Method: "GET", Timeout: 3})
 	}
 
-	var results []Result
 	var client http.Client
 	// Perform the checks
 	for _, check := range checks {
 		fmt.Println("Calling: " + check.URL)
-		results = append(results, performCheck(client, check))
-	}
-
-	for _, result := range results {
-		fmt.Println(result.Status, result.Code, result.Duration)
+		result, err := performCheck(client, check)
+		if err != nil {
+			fmt.Printf("%v \n", err.Error())
+		}
+		fmt.Printf("%v \n\n", result)
 	}
 }
 
-func performCheck(cl http.Client, ch Check) Result {
+func performCheck(cl http.Client, ch Check) (Result, error) {
+	var result Result
+	result.URL = ch.URL
 
 	// Set custom timeout per check
 	cl.Timeout = time.Duration(time.Second * ch.Timeout)
@@ -64,26 +70,16 @@ func performCheck(cl http.Client, ch Check) Result {
 	// Perform the check and defer body close
 	resp, err := cl.Do(req)
 	if err != nil {
-		log.Fatal(err)
+		return Result{}, err
 	}
 	defer resp.Body.Close()
 
-	// Show the results
-	log.Printf("DNS lookup: %d ms", int(stats.DNSLookup/time.Millisecond))
-	log.Printf("TCP connection: %d ms", int(stats.TCPConnection/time.Millisecond))
-	log.Printf("TLS handshake: %d ms", int(stats.TLSHandshake/time.Millisecond))
-	log.Printf("Server processing: %d ms", int(stats.ServerProcessing/time.Millisecond))
-	log.Printf("Content transfer: %d ms", int(stats.ContentTransfer(time.Now())/time.Millisecond))
-
-	var result Result
 	result.Stats = stats
-	result.Code = resp.StatusCode
-	result.Duration = float32((stats.DNSLookup + stats.TCPConnection + stats.TLSHandshake + stats.ServerProcessing + stats.Connect) * time.Millisecond)
 	result.Status = "PASS"
+	result.Code = resp.StatusCode
 	if result.Code != ch.HealthyCode {
 		result.Status = "FAIL"
 		result.Reason = "StatusCode Mismatch!"
 	}
-
-	return result
+	return result, nil
 }
