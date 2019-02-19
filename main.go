@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"time"
@@ -26,7 +27,7 @@ type Result struct {
 }
 
 func main() {
-
+	// TODO: Move these into db or something
 	sites := []string{
 		"https://forbar.net",
 		"https://mikeder.net",
@@ -35,26 +36,53 @@ func main() {
 		"https://git.sqweeb.net",
 		"https://api.github.com",
 	}
-
 	// Setup list of checks to be performed
 	var checks []Check
+	var results []Result
 	for _, url := range sites {
 		checks = append(checks, Check{URL: url, HealthyCode: 200, Method: "GET", Timeout: 3})
 	}
+	go runChecks(&checks, &results)
 
+	// Setup server to do things
+	http.HandleFunc("/checks/run", func(w http.ResponseWriter, r *http.Request) {
+		runChecks(&checks, &results)
+		discardOldResults(&results)
+	})
+
+	http.HandleFunc("/results", func(w http.ResponseWriter, r *http.Request) {
+		b, err := json.Marshal(results)
+		if err != nil {
+			fmt.Fprintf(w, "%v\n", err.Error())
+		}
+		fmt.Fprintf(w, "{\"results\":%v}\n", string(b))
+	})
+
+	http.ListenAndServe(":3001", nil)
+}
+
+func runChecks(c *[]Check, r *[]Result) {
 	var client http.Client
 	// Perform the checks
-	for _, check := range checks {
+	for _, check := range *c {
 		fmt.Println("Calling: " + check.URL)
-		result, err := performCheck(client, check)
+		result, err := performCheck(&client, &check)
 		if err != nil {
 			fmt.Printf("%v \n", err.Error())
 		}
-		fmt.Printf("%v \n\n", result)
+		*r = append(*r, result)
 	}
 }
 
-func performCheck(cl http.Client, ch Check) (Result, error) {
+func discardOldResults(r *[]Result) {
+	if len(*r) > 10 {
+		var newR []Result
+		newR = *r
+		*r = newR[:10]
+	}
+}
+
+func performCheck(cl *http.Client, ch *Check) (Result, error) {
 	var result Result
 	result.URL = ch.URL
 
@@ -70,7 +98,9 @@ func performCheck(cl http.Client, ch Check) (Result, error) {
 	// Perform the check and defer body close
 	resp, err := cl.Do(req)
 	if err != nil {
-		return Result{}, err
+		result.Status = "FAIL"
+		result.Reason = err.Error()
+		return result, err
 	}
 	defer resp.Body.Close()
 
