@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+    "flag"
 	"fmt"
 	"net/http"
 	"time"
@@ -27,6 +28,8 @@ type Result struct {
 }
 
 func main() {
+    version := flag.Bool("version", false, "print version for this thing")
+    flag.Parse()
 	// TODO: Move these into db or something
 	sites := []string{
 		"https://forbar.net",
@@ -57,8 +60,10 @@ func main() {
 		}
 		fmt.Fprintf(w, "{\"results\":%v}\n", string(b))
 	})
-
-	http.ListenAndServe(":3001", nil)
+    if !*version {
+	    http.ListenAndServe(":3001", nil)
+    }
+    fmt.Println("0.1")
 }
 
 func runChecks(c *[]Check, r *[]Result) {
