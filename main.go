@@ -63,6 +63,7 @@ func main() {
 			fmt.Fprintf(w, "%v\n", err.Error())
 		}
 		runChecks(&checks, results)
+		w.Header().Set("Access-Control-Allow-Origin", "*")
 		fmt.Fprintf(w, "{\"checks\":%v}\n", string(b))
 		discardOldResults(results)
 	})
