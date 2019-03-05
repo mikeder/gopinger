@@ -2,7 +2,7 @@ package main
 
 import (
 	"encoding/json"
-    "flag"
+	"flag"
 	"fmt"
 	"net/http"
 	"time"
@@ -29,8 +29,8 @@ type Result struct {
 }
 
 func main() {
-    version := flag.Bool("version", false, "print version for this thing")
-    flag.Parse()
+	version := flag.Bool("version", false, "print version for this thing")
+	flag.Parse()
 	// TODO: Move these into db or something
 	sites := []string{
 		"https://forbar.net",
@@ -72,12 +72,13 @@ func main() {
 		if err != nil {
 			fmt.Fprintf(w, "%v\n", err.Error())
 		}
+		w.Header().Set("Access-Control-Allow-Origin", "*")
 		fmt.Fprintf(w, "{\"results\":%v}\n", string(b))
 	})
-    if !*version {
-	    http.ListenAndServe(":3001", nil)
-    }
-    fmt.Println("0.1")
+	if !*version {
+		http.ListenAndServe(":3001", nil)
+	}
+	fmt.Println("0.1")
 }
 
 func runChecks(c *[]Check, r map[string][]Result) {
