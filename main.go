@@ -24,6 +24,7 @@ type Result struct {
 	Status string `json:"status"`
 	Reason string `json:"reason"`
 	URL    string `json:"url"`
+	Time   time.Time
 }
 
 func main() {
@@ -38,16 +39,29 @@ func main() {
 	}
 	// Setup list of checks to be performed
 	var checks []Check
-	var results []Result
+	results := make(map[string][]Result)
 	for _, url := range sites {
 		checks = append(checks, Check{URL: url, HealthyCode: 200, Method: "GET", Timeout: 3})
 	}
-	go runChecks(&checks, &results)
+	go runChecks(&checks, results)
 
 	// Setup server to do things
+	http.HandleFunc("/test/", func(w http.ResponseWriter, r *http.Request) {
+		b, err := json.Marshal(*r)
+		if err != nil {
+			fmt.Println(w, err.Error())
+		}
+		fmt.Fprintln(w, string(b))
+	})
+
 	http.HandleFunc("/checks/run", func(w http.ResponseWriter, r *http.Request) {
-		runChecks(&checks, &results)
-		discardOldResults(&results)
+		b, err := json.Marshal(checks)
+		if err != nil {
+			fmt.Fprintf(w, "%v\n", err.Error())
+		}
+		runChecks(&checks, results)
+		fmt.Fprintf(w, "{\"checks\":%v}\n", string(b))
+		discardOldResults(results)
 	})
 
 	http.HandleFunc("/results", func(w http.ResponseWriter, r *http.Request) {
@@ -61,7 +75,7 @@ func main() {
 	http.ListenAndServe(":3001", nil)
 }
 
-func runChecks(c *[]Check, r *[]Result) {
+func runChecks(c *[]Check, r map[string][]Result) {
 	var client http.Client
 	// Perform the checks
 	for _, check := range *c {
@@ -70,15 +84,16 @@ func runChecks(c *[]Check, r *[]Result) {
 		if err != nil {
 			fmt.Printf("%v \n", err.Error())
 		}
-		*r = append(*r, result)
+		r[check.URL] = append(r[check.URL], result)
 	}
 }
 
-func discardOldResults(r *[]Result) {
-	if len(*r) > 10 {
-		var newR []Result
-		newR = *r
-		*r = newR[:10]
+func discardOldResults(r map[string][]Result) {
+	for k, v := range r {
+		if len(v) > 10 {
+			newV := v[:10]
+			r[k] = newV
+		}
 	}
 }
 
@@ -105,6 +120,7 @@ func performCheck(cl *http.Client, ch *Check) (Result, error) {
 	defer resp.Body.Close()
 
 	result.Stats = stats
+	result.Time = time.Now()
 	result.Status = "PASS"
 	result.Code = resp.StatusCode
 	if result.Code != ch.HealthyCode {
