@@ -98,8 +98,7 @@ func runChecks(c *[]Check, r map[string][]Result) {
 func discardOldResults(r map[string][]Result) {
 	for k, v := range r {
 		if len(v) > 10 {
-			newV := v[:10]
-			r[k] = newV
+			r[k] = v[len(v)-10:]
 		}
 	}
 }

@@ -4,10 +4,10 @@ ADD . /
 RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o gopinger .
 RUN ["./gopinger", "-version"]
 
-FROM scratch
+FROM alpine:latest 
+RUN apk --no-cache add ca-certificates
 
 COPY --from=fetch /go/src/app/gopinger /bin/gopinger
-ADD ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 
 EXPOSE 3001
 CMD ["gopinger"]
