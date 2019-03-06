@@ -6,9 +6,12 @@ import (
 	"fmt"
 	"net/http"
 	"time"
+    "os"
 
 	httpstat "github.com/tcnksm/go-httpstat"
 )
+
+const version = "0.1"
 
 // Check definition of a check to be performed by the program.
 type Check struct {
@@ -29,8 +32,12 @@ type Result struct {
 }
 
 func main() {
-	version := flag.Bool("version", false, "print version for this thing")
+	printVersion := flag.Bool("version", false, "print version for this thing")
 	flag.Parse()
+	if *printVersion {
+	    fmt.Println(version)
+        os.Exit(0)
+	}
 	// TODO: Move these into db or something
 	sites := []string{
 		"https://forbar.net",
@@ -66,7 +73,7 @@ func main() {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		fmt.Fprintf(w, "{\"checks\":%v}\n", string(b))
 		discardOldResults(results)
-	})
+    })
 
 	http.HandleFunc("/results", func(w http.ResponseWriter, r *http.Request) {
 		b, err := json.Marshal(results)
@@ -76,11 +83,9 @@ func main() {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		fmt.Fprintf(w, "{\"results\":%v}\n", string(b))
 	})
-	if !*version {
-		http.ListenAndServe(":3001", nil)
-	}
-	fmt.Println("0.1")
+    http.ListenAndServe(":3001", nil)
 }
+
 
 func runChecks(c *[]Check, r map[string][]Result) {
 	var client http.Client
