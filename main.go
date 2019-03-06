@@ -24,11 +24,17 @@ type Check struct {
 // Result is the output of a check against the given Check.
 type Result struct {
 	Code   int `json:"code"`
-	Stats  httpstat.Result
+	Stats
 	Status string `json:"status"`
 	Reason string `json:"reason"`
 	URL    string `json:"url"`
 	Time   time.Time
+}
+
+type Stats struct {
+    DNSLookup   time.Duration
+    Connect     time.Duration
+    Processing  time.Duration
 }
 
 func main() {
@@ -130,7 +136,11 @@ func performCheck(cl *http.Client, ch *Check) (Result, error) {
 	}
 	defer resp.Body.Close()
 
-	result.Stats = stats
+	result.Stats = Stats{
+        DNSLookup: stats.NameLookup / time.Millisecond,
+        Connect: stats.Connect / time.Millisecond,
+        Processing: stats.ServerProcessing / time.Millisecond,
+    }
 	result.Time = time.Now()
 	result.Status = "PASS"
 	result.Code = resp.StatusCode
